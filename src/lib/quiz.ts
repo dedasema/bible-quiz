@@ -68,8 +68,8 @@ export function validateQuizSelection(
     }
   }
 
-  if (!Number.isInteger(countPerChapter) || countPerChapter < 1) {
-    errors.push('La cantidad de preguntas debe ser al menos 1.');
+  if (!Number.isFinite(countPerChapter) || !Number.isInteger(countPerChapter) || countPerChapter < 1) {
+    errors.push('La cantidad de preguntas debe ser un número entero mayor o igual a 1.');
   }
 
   const maxCount = getMaxCountForSelection(counts, selectedChapters);

@@ -5,7 +5,9 @@ import {
   getMaxCountForSelection,
   ROMANS_CHAPTERS,
   scoreQuiz,
+  validateQuizSelection,
   validateStoredSession,
+  type ChapterCounts,
   type QuizSession
 } from './quiz';
 
@@ -18,6 +20,24 @@ type AppState = {
   session: QuizSession | null;
   view: View;
 };
+
+export function getStartFormControlState(
+  counts: ChapterCounts,
+  selectedChapters: Chapter[],
+  countPerChapter: number,
+  hasQuestions: boolean
+): { max: number; canStart: boolean; helpText: string } {
+  const max = getMaxCountForSelection(counts, selectedChapters);
+  const validationErrors = validateQuizSelection(counts, selectedChapters, countPerChapter);
+
+  return {
+    max,
+    canStart: hasQuestions && max >= 1 && validationErrors.length === 0,
+    helpText: selectedChapters.length === 0
+      ? 'Seleccioná capítulos para ver el máximo disponible.'
+      : `Máximo ${max} por capítulo seleccionado (${selectedChapters.length * max} en total).`
+  };
+}
 
 export function initRomanosQuiz(input: unknown): void {
   const root = document.querySelector<HTMLElement>('[data-quiz-root]');
@@ -92,7 +112,7 @@ function renderWelcome(root: HTMLElement, state: AppState): void {
 
         <div data-form-errors class="hidden rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"></div>
 
-        <button type="submit" class="w-full rounded-xl bg-amber-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-300" ${hasQuestions ? '' : 'disabled'}>
+        <button data-start-button type="submit" class="w-full rounded-xl bg-amber-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-300" ${hasQuestions ? '' : 'disabled'}>
           Empezar quiz
         </button>
       </form>
@@ -103,29 +123,47 @@ function renderWelcome(root: HTMLElement, state: AppState): void {
   const countInput = root.querySelector<HTMLInputElement>('#count');
   const help = root.querySelector<HTMLElement>('[data-count-help]');
   const errors = root.querySelector<HTMLElement>('[data-form-errors]');
+  const startButton = root.querySelector<HTMLButtonElement>('[data-start-button]');
 
-  const refreshHelp = (): void => {
+  const hideErrors = (): void => {
+    if (!errors) return;
+    errors.classList.add('hidden');
+    errors.textContent = '';
+  };
+
+  const refreshControls = (): void => {
     const selectedChapters = getSelectedChapters(form);
-    const max = getMaxCountForSelection(counts, selectedChapters);
+    const count = parseCountValue(countInput);
+    const controlState = getStartFormControlState(counts, selectedChapters, count, hasQuestions);
+    const validationErrors = validateQuizSelection(counts, selectedChapters, count);
 
     if (help) {
-      help.textContent = selectedChapters.length === 0
-        ? 'Seleccioná capítulos para ver el máximo disponible.'
-        : `Máximo ${max} por capítulo seleccionado (${selectedChapters.length * max} en total).`;
+      help.textContent = controlState.helpText;
     }
 
     if (countInput) {
-      countInput.max = String(max);
+      countInput.min = '1';
+      countInput.max = String(controlState.max);
+      countInput.disabled = !hasQuestions;
+    }
+
+    if (startButton) {
+      startButton.disabled = !controlState.canStart;
+    }
+
+    if (validationErrors.length === 0) {
+      hideErrors();
     }
   };
 
-  form?.addEventListener('change', refreshHelp);
-  refreshHelp();
+  form?.addEventListener('change', refreshControls);
+  countInput?.addEventListener('input', refreshControls);
+  refreshControls();
 
   form?.addEventListener('submit', (event) => {
     event.preventDefault();
     const selectedChapters = getSelectedChapters(form);
-    const count = Number(countInput?.value ?? 0);
+    const count = parseCountValue(countInput);
 
     try {
       const session = createQuizSession(state.bank, selectedChapters, count);
@@ -138,6 +176,7 @@ function renderWelcome(root: HTMLElement, state: AppState): void {
         errors.classList.remove('hidden');
         errors.textContent = error instanceof Error ? error.message : 'No se pudo iniciar el quiz.';
       }
+      refreshControls();
     }
   });
 }
@@ -290,6 +329,11 @@ function getSelectedChapters(form: HTMLFormElement | null): Chapter[] {
 
   return Array.from(form.querySelectorAll<HTMLInputElement>('input[name="chapter"]:checked'))
     .map((input) => Number(input.value) as Chapter);
+}
+
+function parseCountValue(input: HTMLInputElement | null): number {
+  const rawValue = input?.value.trim() ?? '';
+  return rawValue === '' ? Number.NaN : Number(rawValue);
 }
 
 function renderAnswerOptions(question: QuizSession['questions'][number], selectedAnswer: UserAnswer | undefined): string {

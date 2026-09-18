@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { getStartFormControlState } from '../src/lib/client';
 import type { Question, QuestionBank } from '../src/lib/questionBank';
 import {
   createQuizSession,
@@ -26,11 +27,47 @@ const bank: QuestionBank = {
 };
 
 describe('quiz selection and scoring', () => {
+  it('requires at least one selected chapter', () => {
+    const counts = getChapterCounts(bank);
+
+    expect(getMaxCountForSelection(counts, [])).toBe(0);
+    expect(validateQuizSelection(counts, [], 1)).toContain('Seleccioná al menos un capítulo.');
+    expect(() => createQuizSession(bank, [], 1)).toThrow(/Seleccioná al menos un capítulo/);
+  });
+
+  it('rejects non-positive, decimal, NaN, and infinite question counts', () => {
+    const counts = getChapterCounts(bank);
+    const invalidCounts = [-1, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+
+    for (const count of invalidCounts) {
+      expect(validateQuizSelection(counts, [1], count)).toContain('La cantidad de preguntas debe ser un número entero mayor o igual a 1.');
+      expect(() => createQuizSession(bank, [1], count)).toThrow(/La cantidad de preguntas debe ser un número entero mayor o igual a 1/);
+    }
+  });
+
+  it('rejects the empty-input count equivalent', () => {
+    const counts = getChapterCounts(bank);
+    const emptyInputCount = Number('');
+
+    expect(emptyInputCount).toBe(0);
+    expect(validateQuizSelection(counts, [1], emptyInputCount)).toContain('La cantidad de preguntas debe ser un número entero mayor o igual a 1.');
+  });
+
+  it('keeps start controls disabled until the selected chapters and count are valid', () => {
+    const counts = getChapterCounts(bank);
+
+    expect(getStartFormControlState(counts, [], 1, true)).toMatchObject({ max: 0, canStart: false });
+    expect(getStartFormControlState(counts, [1, 2], 3, true)).toMatchObject({ max: 2, canStart: false });
+    expect(getStartFormControlState(counts, [1, 2], 2, true)).toMatchObject({ max: 2, canStart: true });
+    expect(getStartFormControlState(counts, [1], 1, false)).toMatchObject({ max: 2, canStart: false });
+  });
+
   it('bounds count by the smallest selected chapter pool', () => {
     const counts = getChapterCounts(bank);
 
     expect(getMaxCountForSelection(counts, [1, 2])).toBe(2);
     expect(validateQuizSelection(counts, [1, 2], 3)).toContain('La cantidad no puede superar 2, el banco más chico entre los capítulos seleccionados.');
+    expect(() => createQuizSession(bank, [1, 2], 3)).toThrow(/La cantidad no puede superar 2/);
   });
 
   it('creates mixed final questions without duplicate ids', () => {
