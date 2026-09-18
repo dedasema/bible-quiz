@@ -106,13 +106,13 @@ function renderWelcome(root: HTMLElement, state: AppState): void {
 
         <div class="space-y-2">
           <label for="count" class="block text-lg font-semibold">Preguntas por capítulo seleccionado</label>
-          <input id="count" name="count" type="number" min="1" value="1" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-base" ${hasQuestions ? '' : 'disabled'} />
+          <input id="count" name="count" type="number" min="1" inputmode="numeric" pattern="[0-9]*" value="" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-base" ${hasQuestions ? '' : 'disabled'} />
           <p data-count-help class="text-sm text-slate-600">Seleccioná capítulos para ver el máximo disponible.</p>
         </div>
 
         <div data-form-errors class="hidden rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"></div>
 
-        <button data-start-button type="submit" class="w-full rounded-xl bg-amber-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-300" ${hasQuestions ? '' : 'disabled'}>
+        <button data-start-button type="submit" class="w-full rounded-xl bg-amber-500 px-5 py-3 font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-slate-300" disabled>
           Empezar quiz
         </button>
       </form>
@@ -157,7 +157,16 @@ function renderWelcome(root: HTMLElement, state: AppState): void {
   };
 
   form?.addEventListener('change', refreshControls);
-  countInput?.addEventListener('input', refreshControls);
+  countInput?.addEventListener('keydown', (event) => {
+    if (shouldBlockCountInputKey(event.key)) {
+      event.preventDefault();
+    }
+  });
+  countInput?.addEventListener('input', () => {
+    sanitizeCountInput(countInput);
+    refreshControls();
+  });
+  sanitizeCountInput(countInput);
   refreshControls();
 
   form?.addEventListener('submit', (event) => {
@@ -216,11 +225,10 @@ function renderQuiz(root: HTMLElement, state: AppState): void {
           ${renderAnswerOptions(question, selectedAnswer)}
         </form>
       </article>
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button data-prev class="rounded-xl border border-slate-300 px-4 py-3 font-semibold hover:bg-slate-100" ${session.currentIndex === 0 ? 'disabled' : ''}>Anterior</button>
         <button data-clear class="rounded-xl border border-slate-300 px-4 py-3 font-semibold hover:bg-slate-100">Borrar</button>
         <button data-next class="rounded-xl bg-slate-900 px-4 py-3 font-semibold text-white hover:bg-slate-700">${session.currentIndex === session.questions.length - 1 ? 'Ver resultados' : 'Siguiente'}</button>
-        <button data-results class="rounded-xl bg-amber-500 px-4 py-3 font-bold text-slate-950 hover:bg-amber-400">Terminar ahora</button>
       </div>
     </section>
   `;
@@ -250,12 +258,6 @@ function renderQuiz(root: HTMLElement, state: AppState): void {
     } else {
       session.currentIndex += 1;
     }
-    saveSession(session);
-    render(root, state);
-  });
-
-  root.querySelector('[data-results]')?.addEventListener('click', () => {
-    state.view = 'results';
     saveSession(session);
     render(root, state);
   });
@@ -331,8 +333,28 @@ function getSelectedChapters(form: HTMLFormElement | null): Chapter[] {
     .map((input) => Number(input.value) as Chapter);
 }
 
+export function sanitizeCountInputValue(value: string): string {
+  const digitsOnly = value.replace(/\D/g, '');
+  const withoutLeadingZeroes = digitsOnly.replace(/^0+(?=\d)/, '');
+
+  return withoutLeadingZeroes;
+}
+
+export function shouldBlockCountInputKey(key: string): boolean {
+  return key.length === 1 && !/\d/.test(key);
+}
+
+function sanitizeCountInput(input: HTMLInputElement | null): void {
+  if (!input) return;
+
+  const sanitized = sanitizeCountInputValue(input.value);
+  if (input.value !== sanitized) {
+    input.value = sanitized;
+  }
+}
+
 function parseCountValue(input: HTMLInputElement | null): number {
-  const rawValue = input?.value.trim() ?? '';
+  const rawValue = sanitizeCountInputValue(input?.value.trim() ?? '');
   return rawValue === '' ? Number.NaN : Number(rawValue);
 }
 

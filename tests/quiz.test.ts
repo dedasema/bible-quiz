@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { getStartFormControlState } from '../src/lib/client';
+import { getStartFormControlState, sanitizeCountInputValue, shouldBlockCountInputKey } from '../src/lib/client';
 import type { Question, QuestionBank } from '../src/lib/questionBank';
 import {
   createQuizSession,
@@ -56,10 +57,35 @@ describe('quiz selection and scoring', () => {
   it('keeps start controls disabled until the selected chapters and count are valid', () => {
     const counts = getChapterCounts(bank);
 
+    expect(getStartFormControlState(counts, [], Number.NaN, true)).toMatchObject({ max: 0, canStart: false });
+    expect(getStartFormControlState(counts, [1], Number.NaN, true)).toMatchObject({ max: 2, canStart: false });
+    expect(getStartFormControlState(counts, [1], 0, true)).toMatchObject({ max: 2, canStart: false });
     expect(getStartFormControlState(counts, [], 1, true)).toMatchObject({ max: 0, canStart: false });
     expect(getStartFormControlState(counts, [1, 2], 3, true)).toMatchObject({ max: 2, canStart: false });
     expect(getStartFormControlState(counts, [1, 2], 2, true)).toMatchObject({ max: 2, canStart: true });
     expect(getStartFormControlState(counts, [1], 1, false)).toMatchObject({ max: 2, canStart: false });
+  });
+
+  it('sanitizes count input values and blocks non-digit keys before validation', () => {
+    expect(sanitizeCountInputValue('-2')).toBe('2');
+    expect(sanitizeCountInputValue('1e3')).toBe('13');
+    expect(sanitizeCountInputValue(' 04 preguntas')).toBe('4');
+    expect(sanitizeCountInputValue('abc')).toBe('');
+    expect(sanitizeCountInputValue('0')).toBe('0');
+
+    expect(shouldBlockCountInputKey('-')).toBe(true);
+    expect(shouldBlockCountInputKey('e')).toBe(true);
+    expect(shouldBlockCountInputKey('.')).toBe(true);
+    expect(shouldBlockCountInputKey('5')).toBe(false);
+    expect(shouldBlockCountInputKey('Backspace')).toBe(false);
+  });
+
+  it('does not render a separate always-visible finish button in the quiz view', () => {
+    const clientSource = readFileSync(new URL('../src/lib/client.ts', import.meta.url), 'utf8');
+
+    expect(clientSource).not.toContain('data-results');
+    expect(clientSource).not.toContain('Terminar ahora');
+    expect(clientSource).not.toContain('Finish now');
   });
 
   it('bounds count by the smallest selected chapter pool', () => {
