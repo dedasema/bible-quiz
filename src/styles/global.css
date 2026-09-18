@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply min-h-screen bg-slate-950 text-slate-100 antialiased;
+}
+
+button:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  @apply outline outline-2 outline-offset-2 outline-amber-300;
+}
